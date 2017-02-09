@@ -24,9 +24,7 @@ require f1x
 require make
 
 
-experimentdir=/home/ubuntu/f1x-experiments/
-
-
+introclassdir=/home/ubuntu/tempintro/f1x-introclass
 
 
 cd "$( dirname "${BASH_SOURCE[0]}" )"
@@ -41,13 +39,13 @@ for sub in "${subjects[@]}"
 do
 cat <<EOF > /tmp/simple-oracle
 #!/bin/bash
-testdir="/home/ubuntu/IntroClass/$sub/tests/blackbox/"
+testdir="$introclassdir/$sub/tests/blackbox/"
 echo "calling:\$1 in \$(pwd)" &>/tmp/curr-call
 "\$(pwd)/$sub" < "\$testdir/\$1.in" &> /tmp/\$1.out
 diff -q /tmp/\$1.out \$testdir/\$1.out
 EOF
         chmod u+x /tmp/simple-oracle
-	find ~/IntroClass/$sub/ -name "$sub.c" | sed -e "s/$sub\.c//g" &> ~/$sub-direct
+	find $introclassdir/$sub/ -name "$sub.c" | sed -e "s/$sub\.c//g" &> ~/$sub-direct
 	sed -i "/tests/d" ~/$sub-direct
         sed -i "/src/d" ~/$sub-direct
         sed -i "/profile/d" ~/$sub-direct

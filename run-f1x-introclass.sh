@@ -53,13 +53,15 @@ EOF
 	while read name
 	do
 	    origdirectory="$name"
-            version=$(echo "$origdirectory" | cut -d'/' -f6 | cut -c1-5) 
-            subdir=$(echo "$origdirectory" | cut -d'/' -f7)
+            version=$(echo "$origdirectory" | cut -d'/' -f7 | cut -c1-5) 
+            subdir=$(echo "$origdirectory" | cut -d'/' -f8)
 	    work_dir=`mktemp -d`
             #echo "copying cp -r $origdirectory $work_dir"
 	    cp -r $origdirectory/* $work_dir
             cd "$work_dir"
             rm -f $sub
+            #echo "version:$version" 
+            if [[ $version == *"89b1a"* ]]; then
             if grep -q "n1" "$origdirectory/blackbox_test.sh"; then  
 		    curr_test=$(echo ${subjects_tests[$index]})
                     postests=($(grep -E "p[0-9]+\)" $origdirectory/blackbox_test.sh | cut -d')' -f 1))
@@ -75,16 +77,72 @@ EOF
 			msg=$(grep "warning" $work_dir/log.txt)
                         if [[ "$?" == 0 ]];then
                           echo "WARNING:$msg"
-                          exit 1
+                          #exit 1
                         fi
                         echo -e "$sub\t$version\t$subdir\tFAIL\t$msg">>~/f1x-out.log
                         #exit 1 
 		    else
-			echo "SUCCESS"
-                        echo -e "$sub\t$version\t$subdir\tSUCCESS">>~/f1x-out.log
-                        cat output.patch
+			    echo "SUCCESS"
+			    pCount=0
+			    accepted=0
+			    gCount=0
+			    cdir="$work_dir" 
+			    fulldir="$origdirectory"
+			    chmod 755 "$cdir/whitebox_test.sh"
+                            cat output.patch
+			    sed -i "/DIR=/a DIR=$fulldir" "$cdir/whitebox_test.sh"
+                            cd "$cdir" 
+                            patch -l < output.patch			    
+			    
+                            rm -f $currexe 
+			    make
+                            currexe="$cdir/$sub"
+			    goldenPositiveCases=($(grep -E "p[0-9]+\)" "$cdir/whitebox_test.sh" | cut -d')' -f 1))
+			    goldenNegativeCases=($(grep -E "n[0-9]+\)" "$cdir/whitebox_test.sh" | cut -d')' -f 1))
+                            cwddir=$(pwd)
+			    #echo "INDIR:$cwddir"
+			    for p in "${goldenPositiveCases[@]}"
+			    do
+				timeout 30s ./whitebox_test.sh $currexe $p &> tmp$p.txt 
+				validateResult="$(timeout 30s ./whitebox_test.sh $currexe $p)"
+				echo "RUNNING:timeout 30s ./whitebox_test.sh $currexe $p:${validateResult}" 
+				#if grep -q "passed" tmp$p.txt; tn
+				if echo "$validateResult" | grep -q "passed"; then
+				    accepted=$((accepted+1))
+				    pCount=$((pCount+1))
+				    #echo "PASS:timeout 30s ./whitebox_test.sh $currexe $p:${validateResult}" 
+				else
+				    if echo "$validateResult" | grep -q "failed"; then
+				       pCount=$((pCount+1))
+				    fi
+				fi
+			    done
+			    for n in "${goldenNegativeCases[@]}" 
+		            do
+				validateResult="$(timeout 30s ./whitebox_test.sh $currexe $n)" 
+				echo "RUNNING:timeout 30s ./whitebox_test.sh $currexe $n:${validateResult}"
+				if echo "$validateResult" | grep -q "passed"; then
+				    accepted=$((accepted+1))
+				    pCount=$((pCount+1))
+				else
+				    if echo "$validateResult" | grep -q "failed"; then
+				       pCount=$((pCount+1))
+				    fi
+				fi
+			   done
+                             
+                           if [ $pCount -eq $accepted ]; then
+                                  echo -e "$sub\t$version\t$subdir\tSUCCESS\t$accepted/$pCount\t$pCount/$pCount\tCORRECT">>~/f1x-out.log
+                                  echo "accepted:$accepted/$pCount=CORRECT"
+                           else
+                                  echo -e "$sub\t$version\t$subdir\tSUCCESS\t$accepted/$pCount\t$pCount/$pCount\tINCORRECT">>~/f1x-out.log
+                                  echo "accepted:$accepted/$pCount=INCORRECT"
+                           fi
+                           exit 1
+		           
 		    fi 
             fi
+           fi
 	#rm -rf "$work_dir"
 	done < "/home/ubuntu/$sub-direct"
 index=$((index+1))
